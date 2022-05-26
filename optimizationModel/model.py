@@ -6,6 +6,7 @@ from pytest import param
 import pandas as pd
 import numpy as np
 import os.path
+import math
 
 class greenAmmoniaProduction:
     def writeDataFile(dataFileName,inputDataset):
@@ -53,13 +54,21 @@ class greenAmmoniaProduction:
             print("Completed data file")
             
 
-    def main(dataFileName,inputDataset):
+    def main(dataFileName,inputDataset,testMode=False):
         """Hourly operations of green ammonia production complex
 
         Args:
             dataFileName (str): .dat file name which will read in/be created data for model run
+            inputDataset (dict): see README for further clarification on what parameters are expected to be inputted into spreadsheet
+            testMode (bool): automatically set to false, if true-will delete the .dat input file and output file associated with the dataFileName
         """ 
-        
+        #deleting files if test mode is activated
+        if(testMode):
+            try:
+                os.remove(f"modelInputs/{dataFileName}.dat")
+                os.remove(f"modelOutputs/{dataFileName}.xlsx")
+            except:
+                print("Test mode activated but one of files already deleted")
         # creating optimization model with pyomo
         model = AbstractModel()
 
@@ -129,13 +138,8 @@ class greenAmmoniaProduction:
         model.fixedOpexHB = Param()        
 
         #same outline above for different stages but now looking at variable OPEX
-        model.variableOpexWind = Param()
-        model.variableOpexSolar = Param()
         model.variableOpexEY = Param(model.eyPlants)
-        model.variableOpexHS = Param()
-        model.variableOpexBS = Param()
-        model.variableOpexASU = Param()
-        model.variableOpexHB = Param()  
+
        
        
         #energy consumption for each EY model type per unit output of H2
@@ -160,8 +164,10 @@ class greenAmmoniaProduction:
         model.stackSize = Param(model.eyPlants)
         
         #number of periods that the plants will be in operation
-        model.numberPeriods = Param()
+        model.plantLifetime = Param()
         
+        #WACC or discount rate for plant operations
+        model.r = Param()
         ################### END PARAMETERS  ###################
         
         
@@ -221,25 +227,35 @@ class greenAmmoniaProduction:
         #sum up the CAPEX, fixed OPEX, and variable OPEX costs for each of the 7 components of the green ammonia value chain
         
         def windCosts(model):
-            return model.windCapacity*(model.capexWind + model.numberPeriods*(model.fixedOpexWind + sum(model.cfWind[t] for t in model.horizon)))
+            return (model.windCapacity*(model.capexWind 
+                                        + sum((model.fixedOpexWind/(math.pow((1+model.r),t)) for t in np.arange(model.plantLifetime)))))
              
         def solarCosts(model):
-            return model.solarCapacity*(model.capexSolar + model.numberPeriods*(model.fixedOpexSolar+ sum(model.cfSolar[t] for t in model.horizon)))
+            return (model.solarCapacity*(model.capexSolar 
+                                         + sum((model.fixedOpexSolar/(math.pow((1+model.r),t)) for t in np.arange(model.plantLifetime)))))
 
         def eyCosts(model):
-            return sum(model.stackSize[i]*model.eyCapacity[i]*(model.capexEY[i] + model.numberPeriods*model.fixedOpexEY[i]) + model.numberPeriods*(sum(model.energyUseEY[i]*model.eyGen[i,t]*model.variableOpexEY[i] for t in model.horizon)) for i in model.eyPlants)
+            #have a temporary fix for running model without annual data for variable OPEX(8760/len*+(model.horizon)))-calculates the scaling factor for full year expenditures
+            return (sum(model.stackSize[i]*model.eyCapacity[i]*(model.capexEY[i] + 
+                    sum((model.fixedOpexEY[i]/(math.pow((1+model.r),t)) for t in np.arange(model.plantLifetime)))) +
+                    sum((8760/len(model.horizon))*model.variableOpexEY[i]*sum(model.eyGen[i,t2] for t2 in model.horizon)/(math.pow((1+model.r),t)) for t in model.horizon) for i in model.eyPlants))
         
         def hsCosts(model):
-            return model.energyUseHS*model.hsCapacity*(model.capexHS + model.numberPeriods*model.fixedOpexHS) + model.numberPeriods*(sum( model.energyUseHS * model.hsAvail[t]*model.variableOpexHS for t in model.horizon))                              
+            return (model.energyUseHS*model.hsCapacity*(model.capexHS + 
+                    sum((model.fixedOpexHS/(math.pow((1+model.r),t)) for t in np.arange(model.plantLifetime)))))
        
         def bsCosts(model):
-            return model.bsCapacity*(model.capexBS + model.numberPeriods*model.fixedOpexBS) + model.numberPeriods*(sum( model.bsAvail[t]*model.variableOpexBS for t in model.horizon))                              
+            return (model.bsCapacity*(model.capexBS + 
+                    sum((model.fixedOpexBS/(math.pow((1+model.r),t)) for t in np.arange(model.plantLifetime)))))                      
 
         def asuCosts(model):
-            return model.energyUseASU* model.asuCapacity*(model.capexASU + model.numberPeriods*model.fixedOpexASU) + model.numberPeriods*(sum(model.energyUseASU* model.asuGen[t]*model.variableOpexASU for t in model.horizon))                              
+            return (model.energyUseASU*model.asuCapacity*(model.capexASU + 
+                    sum((model.fixedOpexASU/(math.pow((1+model.r),t)) for t in np.arange(model.plantLifetime)))))                                                                
 
         def hbCosts(model):
-            return model.energyUseHB* model.hbCapacity*(model.capexHB + model.numberPeriods*model.fixedOpexHB) + model.numberPeriods*(sum(model.energyUseHB* model.hbGen[t]*model.variableOpexHB for t in model.horizon))                              
+            return (model.energyUseHB*model.hbCapacity*(model.capexHB + 
+                    sum((model.fixedOpexHB/(math.pow((1+model.r),t)) for t in np.arange(model.plantLifetime))))) 
+                    
         
         def minCost_rule(model):
             return (windCosts(model) + solarCosts(model) + eyCosts(model) + hsCosts(model) + 
@@ -258,7 +274,7 @@ class greenAmmoniaProduction:
         #generate enough energy to meet all required island components demand
         #Note: the energy usage parameters should encapsulate the energy efficiencies of each of the stages
         def energyDemand(model,t):
-            return (sum(model.energyUseEY[i]*model.stackSize[i]*model.eyGen[i,t] for i in model.eyPlants) +
+            return (sum(model.energyUseEY[i]*model.eyGen[i,t] for i in model.eyPlants) +
                     model.energyUseHS*model.hsAvail[t] + (model.bsStore[t]/model.bsStoreEfficiency) +
                     model.energyUseASU*model.asuGen[t] + model.energyUseHB*model.hbGen[t])
         
@@ -384,9 +400,11 @@ class greenAmmoniaProduction:
         #instance.display()
         
         
-        #setting up structure in order to get out decision variables and save in correct excel format
+        #setting up structure in order to get out decision variables (and objective) and save in correct excel format
         singleDecisionVariables = ["windCapacity","solarCapacity","bsCapacity",
-                                        "hsCapacity","asuCapacity","hbCapacity"]
+                                        "hsCapacity","asuCapacity","hbCapacity", "totalSystemCost",
+                                        "LCOA","windCosts","solarCosts","eyCosts","hsCosts","bsCosts",
+                                        "asuCosts","hbCosts"]
         
         #included wind and solar generation for simplifying data analysis and timestep
         hourlyDecisionVariables = ["windGen","solarGen","asuGen","hbGen","hsStore",
@@ -413,8 +431,35 @@ class greenAmmoniaProduction:
         singleDvDataset["hsCapacity"][0] = instance.hsCapacity.value            
         singleDvDataset["asuCapacity"][0] = instance.asuCapacity.value            
         singleDvDataset["hbCapacity"][0] = instance.hbCapacity.value            
+        singleDvDataset["totalSystemCost"][0] = value(instance.SystemCost)
         
- 
+        #still assigning single values to df however looking at LCOA and various segments contributing
+        totalAmmoniaProduction = (inputDataset["ammoniaDemand"]*inputDataset["plantLifetime"]*8760/len(instance.horizon))
+        
+        singleDvDataset["LCOA"][0] = value(instance.SystemCost)/totalAmmoniaProduction
+        singleDvDataset["windCosts"][0] = (instance.windCapacity.value*(instance.capexWind 
+                                        + sum((instance.fixedOpexWind/(math.pow((1+instance.r),t)) for t in np.arange(instance.plantLifetime)))))/totalAmmoniaProduction        
+       
+        singleDvDataset["solarCosts"][0] = (instance.solarCapacity.value*(instance.capexSolar 
+                                         + sum((instance.fixedOpexSolar/(math.pow((1+instance.r),t)) for t in np.arange(instance.plantLifetime)))))/totalAmmoniaProduction
+        
+        singleDvDataset["eyCosts"][0] = (sum(instance.stackSize[i]*instance.eyCapacity[i].value*(instance.capexEY[i] + 
+                    sum((instance.fixedOpexEY[i]/(math.pow((1+instance.r),t)) for t in np.arange(instance.plantLifetime)))) +
+                    sum((8760/len(instance.horizon))*instance.variableOpexEY[i]*sum(instance.eyGen[i,t2].value for t2 in instance.horizon)/(math.pow((1+instance.r),t)) for t in instance.horizon) for i in instance.eyPlants))/totalAmmoniaProduction
+        
+        singleDvDataset["hsCosts"][0] = (instance.energyUseHS*instance.hsCapacity.value*(instance.capexHS + 
+                    sum((instance.fixedOpexHS/(math.pow((1+instance.r),t)) for t in np.arange(instance.plantLifetime)))))/totalAmmoniaProduction
+        
+        singleDvDataset["bsCosts"][0] = (instance.bsCapacity.value*(instance.capexBS + 
+                    sum((instance.fixedOpexBS/(math.pow((1+instance.r),t)) for t in np.arange(instance.plantLifetime)))))/totalAmmoniaProduction                      
+        
+        singleDvDataset["asuCosts"][0] = (instance.energyUseASU*instance.asuCapacity.value*(instance.capexASU + 
+                    sum((instance.fixedOpexASU/(math.pow((1+instance.r),t)) for t in np.arange(instance.plantLifetime)))))/totalAmmoniaProduction                                                                
+        
+        singleDvDataset["hbCosts"][0] = (instance.energyUseHB*instance.hbCapacity.value*(instance.capexHB + 
+                    sum((instance.fixedOpexHB/(math.pow((1+instance.r),t)) for t in np.arange(instance.plantLifetime)))))/totalAmmoniaProduction 
+       
+        
         #assigning hourly values to dfs
         for hour in np.arange(len(inputDataset["cfSolar"])):
             hourlyDvDataset["windGen"][hour] = singleDvDataset["windCapacity"][0]*inputDataset["cfWind"][hour]

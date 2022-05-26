@@ -48,13 +48,7 @@ $o^{BS fixed}$ Fixed OPEX cost for BS operations \\
 $o^{ASU fixed}$ Fixed OPEX cost for ASU operations \\
 $o^{HB fixed}$ Fixed OPEX cost for HB operations \\
 \\
-$o^{W variable}$ Variable OPEX cost for wind technology generation \\
-$o^{S variable}$ Variable OPEX cost for solar  technology generation \\
 $o^{EY variable}_{i}$ Variable OPEX cost for EY operations in model $i \in I^{EY}$\\
-$o^{HS variable}$ Variable OPEX cost for HS operations \\
-$o^{BS variable}$ Variable OPEX cost for BS operations \\
-$o^{ASU variable}$ Variable OPEX cost for ASU operations \\
-$o^{HB variable}$ Variable OPEX cost for HB operations \\
 \\
 $e^{EY}_{i}$ energy usage per unit (MWh)output of H2 in EY in model $i \in I^{EY}$ (kg)\\
 $e^{HS}$ energy usage per (MWh) unit output of H2 in HS (kg) \\
@@ -66,8 +60,9 @@ $m^{HB}$ minimum operation of nameplate capacity for HB\\
 \\
 $s^{EY}_{i}$ stack size capacity for electroyzer model $i \in I^{EY}$ (in MW)\\
 \\
-$n$ operating periods that represent chunks of timesteps \textit{t} for simulation \\
-
+$n$ plant lifetime (number of years) that the plants will be in operation (often 20 or 30 years)\\
+\\
+$r$ discount rate on annual basis\\
 \end{tabular} 
 
 
@@ -116,13 +111,13 @@ Objective
 
 where
 \begin{align}
-& W^{cost} = W^{Cap}(c^{W} + n (o^{W fixed} + \sum_{t \in T}\theta^{W}_{t}o^{W variable}))\\
-& S^{cost} = S^{Cap}(c^{S} + n (o^{S fixed}  + \sum_{t \in T}\theta^{S}_{t}o^{S variable}))\\
-& EY^{cost} = \sum_{i \in I^{EY}}(s^{EY}_{i}EY^{Cap}_{i}(c^{EY}_{i} + no^{EY fixed}_{i})  + n\sum_{t \in T}e^{EY}_{i}EY^{Gen}_{i,t}o^{EY variable}_{i})\\
-& HS^{cost} = e^{HS}HS^{Cap}(c^{HS} + no^{HS fixed})  + n\sum_{t \in T}e^{HS}HS^{Avail}_{t}o^{HS variable}\\
-& BS^{cost} = BS^{Cap}(c^{BS} + no^{BS fixed})  + n\sum_{t \in T}BS^{Avail}_{t}o^{BS variable}\\
-& ASU^{cost} = e^{ASU}ASU^{Cap}(c^{ASU} + no^{ASU fixed}) + n\sum_{t \in T}e^{ASU}ASU^{Gen}_{t}o^{ASU variable}\\
-& HB^{cost} = e^{HB}HB^{Cap}(c^{HB} + no^{HB fixed}) + n\sum_{t \in T}e^{HB}HB^{Gen}_{t}o^{HB variable}
+& W^{cost} = W^{Cap}(c^{W} + \sum_{\substack{t = 0}}^n\frac{o^{W fixed}}{(1+r)^t} )\\
+& S^{cost} = S^{Cap}(c^{S} + \sum_{\substack{t = 0}}^n\frac{o^{S fixed}}{(1+r)^t} )\\
+& EY^{cost} = \sum_{i \in I^{EY}}(s^{EY}_{i}EY^{Cap}_{i}(c^{EY}_{i} + \sum_{\substack{t = 0}}^n\frac{o^{EY fixed}_{i}}{(1+r)^t} )) + \sum_{\substack{t = 0}}^n\frac{o^{EY variable}_{i}(\sum_{t \in T}EY^{Gen}_{i,t})}{(1+r)^t}\\
+& HS^{cost} = e^{HS}HS^{Cap}(c^{HS} + \sum_{\substack{t = 0}}^n\frac{o^{HS fixed}}{(1+r)^t} ))\\
+& BS^{cost} = BS^{Cap}(c^{BS} + \sum_{\substack{t = 0}}^n\frac{o^{BS fixed}}{(1+r)^t} ))\\
+& ASU^{cost} = e^{ASU}ASU^{Cap}(c^{ASU} + \sum_{\substack{t = 0}}^n\frac{o^{ASU fixed}}{(1+r)^t} ))\\
+& HB^{cost} = e^{HB}HB^{Cap}(c^{HB} + \sum_{\substack{t = 0}}^n\frac{o^{HB fixed}}{(1+r)^t} ))
 \end{align}
 
 S.t.

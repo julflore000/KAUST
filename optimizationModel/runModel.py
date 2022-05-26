@@ -7,7 +7,7 @@ import os
 
 #dont include the .dat ending or path location
 datFileName = "testRun"
-
+testMode = True
 
 pdSingleParamDataset = pd.read_excel("dataInputs/inputSheet.xlsx",sheet_name='systemSettings')
 
@@ -49,7 +49,7 @@ startRun = datetime.now()
 start_time = startRun.strftime("%H:%M:%S")
 print("Run started:", start_time)
 
-greenAmmoniaProduction.main(datFileName,inputDataset)
+greenAmmoniaProduction.main(datFileName,inputDataset,testMode)
 
 
 #getting end time
