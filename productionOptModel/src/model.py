@@ -310,7 +310,7 @@ class greenAmmoniaProduction:
         def energyGen(model,t):
             #summing up generation from wind, solar, and battery storage (don't need to include efficiency for bs as 
             # the decision variable BSdeploy is the actual quantity deployed to grid)
-            return(model.cfWind[t]*model.windCapacity + model.cfSolar[t]*model.solarCapacity + model.bsDeployEfficiency*model.bsDeploy[t])
+            return(model.cfWind[t]*model.windCapacity + model.cfSolar[t]*model.solarCapacity + model.bsDeploy[t])
         
         def energyRule(model,t):
             #energy generated should always be equal to or greater than energy demanded
@@ -403,7 +403,7 @@ class greenAmmoniaProduction:
             return(model.hbGen[t] <= model.hbCapacity)
         model.hbGenUpperBoundConstraint = Constraint(model.horizon,rule=hbGenUpperBoundRule)        
         
-        #ramping constraint up for ASU
+        #ramp up constraint for ASU
         def asuGenRampRateUp(model,t):
             if(t==0):
                 return(model.asuGen[t] <= model.asuCapacity)
@@ -521,7 +521,6 @@ class greenAmmoniaProduction:
         singleDvDataset["totalSystemCost"][0] = value(instance.SystemCost)
         
         #still assigning single values to df however looking at LCOA and various segments contributing
-        print((inputDataset["ammoniaDemand"]*8760/len(instance.horizon)))
         totalAmmoniaProduction = sum((inputDataset["ammoniaDemand"]*8760/len(instance.horizon))/(math.pow((1+instance.r),t)) for t in np.arange(instance.plantLifetime))
         
         
