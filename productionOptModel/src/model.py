@@ -173,7 +173,13 @@ class greenAmmoniaProduction:
         
         #number of periods that the plants will be in operation
         model.plantLifetime = Param()
-        
+
+        #ramping rate for ASU
+        model.rampingRateASU = Param()
+
+        #ramping rate for HB plant
+        model.rampingRateHB = Param()
+       
         #WACC or discount rate for plant operations
         model.r = Param()
         ################### END PARAMETERS  ###################
@@ -397,6 +403,41 @@ class greenAmmoniaProduction:
             return(model.hbGen[t] <= model.hbCapacity)
         model.hbGenUpperBoundConstraint = Constraint(model.horizon,rule=hbGenUpperBoundRule)        
         
+        #ramping constraint up for ASU
+        def asuGenRampRateUp(model,t):
+            if(t==0):
+                return(model.asuGen[t] <= model.asuCapacity)
+            else:
+                return((model.asuGen[t]-model.asuGen[t-1]) <= model.rampingRateASU*model.asuCapacity)
+        model.asuGenRampRateUp = Constraint(model.horizon,rule=asuGenRampRateUp)        
+
+        #ramp down constraint for ASU
+        def asuGenRampRateDown(model,t):
+            if(t==0):
+                return(model.asuGen[t] <= model.asuCapacity)
+            else:
+                return((model.asuGen[t-1]-model.asuGen[t]) <= model.rampingRateASU*model.asuCapacity)
+        model.asuGenRampRateDown = Constraint(model.horizon,rule=asuGenRampRateDown)   
+
+
+        
+        #ramping constraint up for HB plant
+        def hbGenRampRateUp(model,t):
+            if(t==0):
+                return(model.hbGen[t] <= model.hbCapacity)
+            else:
+                return((model.hbGen[t]-model.hbGen[t-1]) <= model.rampingRateHB*model.hbCapacity)
+        model.hbGenRampRateUp = Constraint(model.horizon,rule=hbGenRampRateUp)                
+        
+        
+        #ramping constraint down for HB plant
+        def hbGenRampRateDown(model,t):
+            if(t==0):
+                return(model.hbGen[t] <= model.hbCapacity)
+            else:
+                return((model.hbGen[t-1]-model.hbGen[t]) <= model.rampingRateHB*model.hbCapacity)
+        model.hbGenRampRateDown = Constraint(model.horizon,rule=hbGenRampRateDown)      
+        
         #ASU plant production can not fall below its minimum hourly production capacity
         def asuGenLowerBoundRule(model,t):
             return(model.asuGen[t] >= model.minCapacityASU*model.asuCapacity)
@@ -480,7 +521,10 @@ class greenAmmoniaProduction:
         singleDvDataset["totalSystemCost"][0] = value(instance.SystemCost)
         
         #still assigning single values to df however looking at LCOA and various segments contributing
-        totalAmmoniaProduction = (inputDataset["ammoniaDemand"]*inputDataset["plantLifetime"]*8760/len(instance.horizon))
+        print((inputDataset["ammoniaDemand"]*8760/len(instance.horizon)))
+        totalAmmoniaProduction = sum((inputDataset["ammoniaDemand"]*8760/len(instance.horizon))/(math.pow((1+instance.r),t)) for t in np.arange(instance.plantLifetime))
+        
+        
         
         singleDvDataset["LCOA"][0] = value(instance.SystemCost)/totalAmmoniaProduction
         
