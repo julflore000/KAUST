@@ -86,6 +86,10 @@ This repo contains the work I have done and any presentations I made on my work 
     * Get wind power and solar data resource
     * Run initial longer tests up to a year
 * **Wednesday**
+    * Confirm model parameters align with literature values
+    * Restructure model to include ramping constraints for ASU and ammonia plant
+    * Update documentation in formulation
+    * Provide weekly update report
 * **Thursday**
 
 ## Week 5
