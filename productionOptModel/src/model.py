@@ -105,6 +105,13 @@ class greenAmmoniaProduction:
         #energy efficiency of deploying energy from battery
         model.bsDeployEfficiency = Param()        
         
+        #energy efficiency of fuel cell (converting hydrogen into electricity)
+        model.fcDeployEfficiency = Param()
+        
+        #vaporization rate of H2 in percent stored
+        model.hsVaporizationRate = Param()
+        
+        
         #chemical efficiency of using hydrogen in  HB process (e.g.~.18 tons H2 input will output ~1 ton ammonia)
         model.hbHydrogenEfficiency = Param() 
         
@@ -124,6 +131,9 @@ class greenAmmoniaProduction:
         #battery storage CAPEX per MWh
         model.capexBS = Param()
         
+        #fuel cell CAPEX
+        model.capexFC = Param()
+        
         #air separation unit CAPEX per MW
         model.capexASU = Param()
         
@@ -136,6 +146,7 @@ class greenAmmoniaProduction:
         model.fixedOpexEY = Param(model.eyPlants)
         model.fixedOpexHS = Param()
         model.fixedOpexBS = Param()
+        model.fixedOpexFC = Param()
         model.fixedOpexASU = Param()
         model.fixedOpexHB = Param()        
 
@@ -150,6 +161,9 @@ class greenAmmoniaProduction:
         
         #energy consumption for Hydrogen storage: MWh/kg H2
         model.energyUseHS = Param()
+        
+        #energy density of hydrogen (around 33.6 kWh per kg of H2)
+        model.energyDensityFC = Param()
         
         #energy consumption for ASU: MWh/kg N2
         model.energyUseASU = Param()
@@ -174,6 +188,10 @@ class greenAmmoniaProduction:
         #number of periods that the plants will be in operation
         model.plantLifetime = Param()
 
+        #fuel cell plant lifetime
+        model.fcLifetime = Param()
+
+
         #ramping rate for ASU
         model.rampingRateASU = Param()
 
@@ -182,7 +200,11 @@ class greenAmmoniaProduction:
        
         #WACC or discount rate for plant operations
         model.r = Param()
+        
+        #utilization ratio of plant (not used in model but calculated for total ammonia production)
+        model.utilizationRatio = Param()
         ################### END PARAMETERS  ###################
+        
         
         
         
@@ -201,6 +223,9 @@ class greenAmmoniaProduction:
         
         #total hydrogen storage capacity to build (kg H2)
         model.hsCapacity = Var(domain=NonNegativeReals)
+        
+        #fuel cell nameplate capacity (MW)
+        model.fcCapacity = Var(domain=NonNegativeReals)
         
         #total ASU capacity to build (kg N2)
         model.asuCapacity = Var(domain=NonNegativeReals)
@@ -231,6 +256,9 @@ class greenAmmoniaProduction:
         
         #amount of hydrogen (kg) to deploy to HB process at timestep t
         model.hsDeploy = Var(model.horizon,domain=NonNegativeReals)
+        
+        #amount of energy (MWh) to release into islanded grid from fuel cell at timestep t
+        model.fcDeploy = Var(model.horizon,domain=NonNegativeReals)
         
         #amount of energy (MWh) to release into islanded grid at timestep t
         model.bsDeploy = Var(model.horizon,domain=NonNegativeReals)
@@ -274,6 +302,13 @@ class greenAmmoniaProduction:
             return (model.bsCapacity*(model.capexBS + 
                     sum((model.fixedOpexBS/(math.pow((1+model.r),t)) for t in np.arange(model.plantLifetime)))))                      
 
+        def fcCosts(model):
+            #same as bsCosts however since fuel cell lifetime is so small, will need to have multiple installations
+            # over lifetime of the simulation
+            return(model.fcCapacity*((model.plantLifetime/model.fcLifetime)*model.capexFC +
+                    sum((model.fixedOpexFC/(math.pow((1+model.r),t)) for t in np.arange(model.plantLifetime)))))
+        
+        
         def asuCosts(model):
             #same structure for hsCosts but unique parameters
             return (model.energyUseASU*model.asuCapacity*(model.capexASU + 
@@ -287,7 +322,7 @@ class greenAmmoniaProduction:
         
         def minCost_rule(model):
             return (windCosts(model) + solarCosts(model) + eyCosts(model) + hsCosts(model) + 
-                    bsCosts(model) + asuCosts(model) + hbCosts(model))
+                    bsCosts(model) + fcCosts(model) + asuCosts(model) + hbCosts(model))
         
         model.SystemCost = Objective(rule = minCost_rule, sense = minimize)
         
@@ -310,7 +345,7 @@ class greenAmmoniaProduction:
         def energyGen(model,t):
             #summing up generation from wind, solar, and battery storage (don't need to include efficiency for bs as 
             # the decision variable BSdeploy is the actual quantity deployed to grid)
-            return(model.cfWind[t]*model.windCapacity + model.cfSolar[t]*model.solarCapacity + model.bsDeploy[t])
+            return(model.cfWind[t]*model.windCapacity + model.cfSolar[t]*model.solarCapacity + model.bsDeploy[t] + model.fcDeploy[t])
         
         def energyRule(model,t):
             #energy generated should always be equal to or greater than energy demanded
@@ -351,7 +386,20 @@ class greenAmmoniaProduction:
                 
         model.bsDeployUpperBoundConstraint = Constraint(model.horizon,rule=bsDeployUpperBoundRule)
 
+        #fuel cell operations definition (must be less than capacity built)
+        def fcOperationsRule(model,t):
+            return(model.fcDeploy[t] <= model.fcCapacity)
+        model.fcDeployOperationsConstraint = Constraint(model.horizon,rule=fcOperationsRule)
 
+
+        #fuel cell hydrogen deployment definition (need to convert kg to MWh and then factor in efficiency of fuel cell)
+        def fcDeployUpperBoundRule(model,t):
+            if(t==0):
+                return(model.fcDeploy[t] == 0)
+            else:
+                return(model.fcDeploy[t] <= model.fcDeployEfficiency*model.energyDensityFC*model.hsAvail[t-1])
+        model.fcDeployUpperBoundConstraint = Constraint(model.horizon,rule=fcDeployUpperBoundRule)
+        
 
 
         #hydrogen storage operations definition (current hydrogen available is zero at beginning and equal to previous available amount + new hydrogen stored - (hydrogen deployed + hydrogen required to deploy it))
@@ -359,7 +407,7 @@ class greenAmmoniaProduction:
             if t == 0:
                 return(model.hsAvail[0] == 0)
             else:
-                return(model.hsAvail[t] == model.hsAvail[t-1] + model.hsStore[t] - (model.hsDeploy[t])/model.hsDeployEfficiency)
+                return(model.hsAvail[t] == (1-model.hsVaporizationRate)*model.hsAvail[t-1] + model.hsStore[t] - ((model.hsDeploy[t])/model.hsDeployEfficiency) - (model.fcDeploy[t]/(model.fcDeployEfficiency*model.energyDensityFC)))
         model.hsAvailEnergyDefConstraint = Constraint(model.horizon,rule=hsAvailEnergyRule)
 
         #max available hydrogen in storage is storage capacity
@@ -484,18 +532,19 @@ class greenAmmoniaProduction:
         
         #setting up structure in order to get out decision variables (and objective) and save in correct excel format
         singleDecisionVariables = ["windCapacity","solarCapacity","bsCapacity",
-                                        "hsCapacity","asuCapacity","hbCapacity", "totalSystemCost",
+                                        "hsCapacity","fcCapacity","asuCapacity","hbCapacity", "totalSystemCost",
                                         "LCOA","windCosts","solarCosts","eyCosts","hsCosts",
-                                        "bsCosts","asuCosts","hbCosts","windCapexCosts","windOpexCosts","solarCapexCosts","solarOpexCosts",
+                                        "bsCosts","fcCosts","asuCosts","hbCosts","windCapexCosts",
+                                        "windOpexCosts","solarCapexCosts","solarOpexCosts",
                                         "eyCapexCosts","eyOpexCosts","hsCapexCosts","hsOpexCosts",
-                                        "bsCapexCosts", "bsOpexCosts","asuCapexCosts","asuOpexCosts",
-                                        "hbCapexCosts","hbOpexCosts"]
+                                        "bsCapexCosts", "bsOpexCosts","fcCapexCosts","fcOpexCosts",
+                                        "asuCapexCosts","asuOpexCosts","hbCapexCosts","hbOpexCosts"]
         
         
         
         #included wind and solar generation for simplifying data analysis and timestep
         hourlyDecisionVariables = ["windGen","solarGen","asuGen","hbGen","hsStore",
-                                   "bsStore","hsAvail","bsAvail", "hsDeploy","bsDeploy","timestep"]
+                                   "bsStore","hsAvail","bsAvail", "hsDeploy","bsDeploy","fcDeploy","timestep"]
         
         #eyDecisionVariables =  ["eyCapacity"]
         
@@ -515,14 +564,15 @@ class greenAmmoniaProduction:
         singleDvDataset["solarCapacity"][0] = instance.solarCapacity.value
             
         singleDvDataset["bsCapacity"][0] = instance.bsCapacity.value            
-        singleDvDataset["hsCapacity"][0] = instance.hsCapacity.value            
+        singleDvDataset["hsCapacity"][0] = instance.hsCapacity.value
+        singleDvDataset["fcCapacity"][0] = instance.fcCapacity.value                    
         singleDvDataset["asuCapacity"][0] = instance.asuCapacity.value            
         singleDvDataset["hbCapacity"][0] = instance.hbCapacity.value            
         singleDvDataset["totalSystemCost"][0] = value(instance.SystemCost)
         
         #still assigning single values to df however looking at LCOA and various segments contributing
-        totalAmmoniaProduction = sum((inputDataset["ammoniaDemand"]*8760/len(instance.horizon))/(math.pow((1+instance.r),t)) for t in np.arange(instance.plantLifetime))
-        
+        totalAmmoniaProduction = instance.utilizationRatio*sum((inputDataset["ammoniaDemand"]*8760/len(instance.horizon))/(math.pow((1+instance.r),t)) for t in np.arange(instance.plantLifetime))
+        #totalAmmoniaProduction = instance.utilizationRatio*sum((inputDataset["ammoniaDemand"]*8760/len(instance.horizon))/(math.pow((1+0),t)) for t in np.arange(instance.plantLifetime))
         
         
         singleDvDataset["LCOA"][0] = value(instance.SystemCost)/totalAmmoniaProduction
@@ -560,6 +610,14 @@ class greenAmmoniaProduction:
         singleDvDataset["bsCapexCosts"] = (instance.bsCapacity.value*(instance.capexBS))/totalAmmoniaProduction
         singleDvDataset["bsOpexCosts"] = (instance.bsCapacity.value*sum((instance.fixedOpexBS/(math.pow((1+instance.r),t)) for t in np.arange(instance.plantLifetime))))/totalAmmoniaProduction
         
+        
+        singleDvDataset["fcCosts"][0] = (instance.fcCapacity.value*((instance.plantLifetime/instance.fcLifetime)*instance.capexFC + 
+                    sum((instance.fixedOpexFC/(math.pow((1+instance.r),t)) for t in np.arange(instance.plantLifetime)))))/totalAmmoniaProduction                      
+        singleDvDataset["fcCapexCosts"] = (instance.fcCapacity.value*((instance.plantLifetime/instance.fcLifetime)*instance.capexFC))/totalAmmoniaProduction
+        singleDvDataset["fcOpexCosts"] = (instance.fcCapacity.value*sum((instance.fixedOpexFC/(math.pow((1+instance.r),t)) for t in np.arange(instance.plantLifetime))))/totalAmmoniaProduction
+
+
+        
         singleDvDataset["asuCosts"][0] = (instance.energyUseASU*instance.asuCapacity.value*(instance.capexASU + 
                     sum((instance.fixedOpexASU/(math.pow((1+instance.r),t)) for t in np.arange(instance.plantLifetime)))))/totalAmmoniaProduction                                                                
         singleDvDataset["asuCapexCosts"] = (instance.energyUseASU*instance.asuCapacity.value*(instance.capexASU))/totalAmmoniaProduction
@@ -570,6 +628,13 @@ class greenAmmoniaProduction:
                     sum((instance.fixedOpexHB/(math.pow((1+instance.r),t)) for t in np.arange(instance.plantLifetime)))))/totalAmmoniaProduction 
         singleDvDataset["hbCapexCosts"] = (instance.energyUseHB*instance.hbCapacity.value*(instance.capexHB))/totalAmmoniaProduction
         singleDvDataset["hbOpexCosts"] = (instance.energyUseHB*instance.hbCapacity.value*sum(instance.fixedOpexHB/(math.pow((1+instance.r),t)) for t in np.arange(instance.plantLifetime)))/totalAmmoniaProduction
+        
+        #including load factors for EY,ASU, and HB
+        singleDvDataset["asuLoadFactor"] =  sum(instance.asuGen[hour].value for hour in np.arange(len(inputDataset["cfSolar"])))/(len(inputDataset["cfSolar"])*instance.asuCapacity.value)
+        singleDvDataset["hbLoadFactor"] =  sum(instance.hbGen[hour].value for hour in np.arange(len(inputDataset["cfSolar"])))/(len(inputDataset["cfSolar"])*instance.hbCapacity.value)
+        
+        
+        
         
         #assigning hourly values to dfs
         for hour in np.arange(len(inputDataset["cfSolar"])):
@@ -583,14 +648,20 @@ class greenAmmoniaProduction:
             hourlyDvDataset["bsAvail"][hour] = instance.bsAvail[hour].value    
             hourlyDvDataset["hsDeploy"][hour] = instance.hsDeploy[hour].value    
             hourlyDvDataset["bsDeploy"][hour] = instance.bsDeploy[hour].value
+            hourlyDvDataset["fcDeploy"][hour] = instance.fcDeploy[hour].value
             
             #for later data analysis
             hourlyDvDataset["timestep"][hour] = hour + 1   
 
         #assigning single dvs for ey types
+        eySingleDvDataset = pd.DataFrame(columns=np.arange(len(inputDataset["capexEY"])), index=range(2))
         for eyUnit in np.arange(len(inputDataset["capexEY"])):
-            eySingleDvDataset[eyUnit][0] = instance.eyCapacity[eyUnit].value    
-
+            #looking at capacity and load factor
+            eySingleDvDataset[eyUnit][0] = (1/instance.energyUseEY[eyUnit])*instance.stackSize[eyUnit]*instance.eyCapacity[eyUnit].value
+            if(instance.eyCapacity[eyUnit].value != 0):
+                eySingleDvDataset[eyUnit][1] = sum(instance.eyGen[eyUnit,hour].value for hour in np.arange(len(instance.horizon)))/(len(instance.horizon)*(1/instance.energyUseEY[eyUnit])*instance.stackSize[eyUnit]*instance.eyCapacity[eyUnit].value)
+            else:
+                eySingleDvDataset[eyUnit][1] = 0
         #assigning hourly dvs for each ey unit
         for eyUnit in np.arange(len(inputDataset["capexEY"])):
             for hour in np.arange(len(inputDataset["cfSolar"])):

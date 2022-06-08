@@ -8,8 +8,13 @@ import os
 #dont include the .dat ending or path location
 datFileName = "testRun"
 testMode = True
-totalNumberDays = 100
-transmissionLosses = .1
+startDay = 0
+endDay = 75
+'''datFileName = "testRun"
+testMode = True
+startDay = 0
+endDay = 25'''
+transmissionLosses = .02
 
 pdSingleParamDataset = pd.read_excel("../dataInputs/inputSheet.xlsx",sheet_name='systemSettings')
 
@@ -20,14 +25,14 @@ paramValues = pdSingleParamDataset["Value"]
 inputDataset = {}
 
 #adding wind and solar generation capacity factors
-windCFDataset = pd.read_excel("../dataInputs/reData.xlsx",sheet_name='cfWind')
-solarCFDataset = pd.read_excel("../dataInputs/reData.xlsx",sheet_name='cfSolar')
+windCFDataset = pd.read_excel("../dataInputs/reDataChile.xlsx",sheet_name='cfWind')
+solarCFDataset = pd.read_excel("../dataInputs/reDataChile.xlsx",sheet_name='cfSolar')
 
 
 
-inputDataset["cfWind"] = np.array(windCFDataset["cfWind"])[0:(24*totalNumberDays)]*(1-transmissionLosses)
+inputDataset["cfWind"] = np.array(windCFDataset["cfWind"])[(24*startDay):(24*endDay)]*(1-transmissionLosses)
 
-inputDataset["cfSolar"] = np.array(solarCFDataset["cfSolar"])[0:(24*totalNumberDays)]*(1-transmissionLosses)
+inputDataset["cfSolar"] = np.array(solarCFDataset["cfSolar"])[(24*startDay):(24*endDay)]*(1-transmissionLosses)
 
 #adding single param value data
 for paramName,paramValue in zip(paramNames,paramValues):
@@ -46,7 +51,7 @@ for paramName in pdEYDataset.columns:
         inputDataset[paramName][index] = pdEYDataset[paramName][index]
 
 #getting correct ammonia demand
-inputDataset["ammoniaDemand"] = inputDataset["ammoniaDemand"]*totalNumberDays
+inputDataset["ammoniaDemand"] = inputDataset["ammoniaDemand"]*endDay
 
 
 # for tracking elapsed time
