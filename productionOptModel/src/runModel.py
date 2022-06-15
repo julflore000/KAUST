@@ -25,8 +25,8 @@ paramValues = pdSingleParamDataset["Value"]
 inputDataset = {}
 
 #adding wind and solar generation capacity factors
-windCFDataset = pd.read_excel("../dataInputs/reDataChile.xlsx",sheet_name='cfWind')
-solarCFDataset = pd.read_excel("../dataInputs/reDataChile.xlsx",sheet_name='cfSolar')
+windCFDataset = pd.read_excel("../dataInputs/reData.xlsx",sheet_name='cfWind')
+solarCFDataset = pd.read_excel("../dataInputs/reData.xlsx",sheet_name='cfSolar')
 
 
 

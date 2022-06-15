@@ -91,23 +91,42 @@ This repo contains the work I have done and any presentations I made on my work 
     * Update documentation in formulation
     * Provide weekly update report
 * **Thursday**
+    * Weekly update meeting and prep
+    * Investigate fuel cell possibility of incorporating into model
 
 ## Week 5
-**Weekly Goal:** 
+**Weekly Goal:**  Add Fuel Cell and explore the transportation/distribution
 
 * **Sunday**
+    * Implement fuel cell addition to model
+    * Investigate RE data profiles and reach out to Harif
 * **Monday**
+    * Explore fuel cell additions/other sites data
+    * Start work on the population visualizations of the data
 * **Tuesday**
+    * Create weekly slides and ideate model structure
 * **Wednesday**
+    * Weekly group meeting-present work
+    * Start formulating transportation model
 * **Thursday**
+    * Shashank group meeting attend
+    * Continue transportation model update
 
 ## Week 6
-**Weekly Goal:** 
+**Weekly Goal:**  Get initial transportation model formulate and built, possibly start model confirmation
 
 * **Sunday**
+    * Get 1/2 of formulation done
+    * Start model coding
 * **Monday**
+    * Research other model formulations
+    * Finish formal model formulation
 * **Tuesday**
+    * Convert model into code
+    * Restructure model for simplicity/user readability
 * **Wednesday**
+    * Weekly meeting presentation
+    * Debug model
 * **Thursday**
 
 ## Week 7
