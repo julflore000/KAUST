@@ -137,7 +137,7 @@ This section of the repo details the work on the green ammonia production chain 
 
 Then converted to capacity factor
 
-### Table of Outputs
+### Outputs
 * Model Outputs
     * Sizing capacities
         * Wind capacity
