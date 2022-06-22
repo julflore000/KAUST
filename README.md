@@ -128,14 +128,21 @@ This repo contains the work I have done and any presentations I made on my work 
     * Weekly meeting presentation
     * Debug model
 * **Thursday**
+    * Redesign and reconfigure the entire setup
 
 ## Week 7
-**Weekly Goal:** 
+**Weekly Goal:** Flush out new design ideas for model transportation and settle on design
 
 * **Sunday**
+    * Selected network design and figured out next steps to take
 * **Monday**
+    * Work on slides for FVV study presentation
+    * Debug through initial model
 * **Tuesday**
+    * Present FVV study presentation
+    * Continue the arduous task of debuging
 * **Wednesday**
+    * Fill out readme for the model inputs
 * **Thursday**
 
 ## Week 8
