@@ -14,6 +14,8 @@ This section of the repo details the work on the green ammonia production chain 
 **[Ammonia Synthesis](#ammonia-synthesis)**<br>
 **[Other Helpful Info](#other-helpful-info)**<br>
 
+### Table of Outputs
+**[Output](#outputs)**<br>
 
 ### General Parameters
 1. Ammonia Demand
@@ -134,3 +136,20 @@ This section of the repo details the work on the green ammonia production chain 
 * Wind speed then converted to power output from Vestas V90-3.0 Power profile from SAM library which has a Pout of 1800
 
 Then converted to capacity factor
+
+### Table of Outputs
+* Model Outputs
+    * Sizing capacities
+        * Wind capacity
+        * Solar capacity
+        * Battery Storage capacity
+        * Hydrogen Storage capacity
+        * Fuel cell capacity
+        * Electrolyzer capacity
+        * ASU capacity
+        * Ammonia capacity
+    * Hourly operations
+        * How much hydrogen to store/deploy in tank
+        * How much hydrogen to produce
+        * How much energy to store/deploy in battery
+        * How much ammonia to produce at each hour to meet overall production targets

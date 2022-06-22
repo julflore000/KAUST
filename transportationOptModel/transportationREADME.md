@@ -8,6 +8,9 @@ This section of the repo details the work on the green ammonia downstream side
 **[Regions](#regions)**<br>
 **[Other Helpful Info](#other-helpful-info)**<br>
 
+### Table of Outputs
+**[Output](#outputs)**<br>
+
 
 ### General Parameters
 1. Ship speed
@@ -38,3 +41,10 @@ This section of the repo details the work on the green ammonia downstream side
 * Nautical mile distances from https://www.portworld.com/map
 * GB shapefile from https://geoportal.statistics.gov.uk/datasets/nuts-level-1-january-2018-ultra-generalised-clipped-boundaries-in-the-united-kingdom/explore?filters=eyJudXRzMTE4Y2QiOlsiVUtMIiwiVUtLIiwiVUtKIiwiVUtJIiwiVUtIIiwiVUtHIiwiVUtGIiwiVUtFIiwiVUtEIiwiVUtDIiwiVUtNIl19&location=53.481863%2C-0.342861%2C6.00
 * GB population of cities from https://public.opendatasoft.com/explore/dataset/geonames-all-cities-with-a-population-1000/export/?disjunctive.cou_name_en&sort=name&q=united+kingdom&location=6,54.83866,0.0769&basemap=jawg.light
+
+### Table of Outputs
+* Model Outputs
+    * Hourly flow of transport network
+        * How much fuel to have in storage
+        * How much fuel to move on a certain ship at a certain time
+        * How many ships you need to move the required demand
