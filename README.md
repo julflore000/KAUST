@@ -143,23 +143,41 @@ This repo contains the work I have done and any presentations I made on my work 
     * Continue the arduous task of debuging
 * **Wednesday**
     * Fill out readme for the model inputs
-* **Thursday**
+    * Weekly meetings
+* ***Thursday**
+    * Finish model formulation and start initial testing
+    * See if you can get initial visualization working
 
 ## Week 8
-**Weekly Goal:** 
+**Weekly Goal:** Present Work Update and Implement Hydrogen Model
 
 * **Sunday**
+    * Explore data visualizations for the fleet optimization model
+    * Present work update meeting
 * **Monday**
+    * Create hydrogen production formulation
+    * Create hydrogen software implementation
+    * Create hydrogen flow diagram
 * **Tuesday**
+    * Create network outline for importing to SK,JP,DE
+    * Create visualization of flows
 * **Wednesday**
+    * Explore sensitivity of runtime in transport optimization model
 * **Thursday**
+    * Create initial sketch up of transportation sensitivity analysis model
+        * Compromise between single route and cost identification and optimization of entire transportation network
 
 ## Week 9
-**Weekly Goal:** 
+**Weekly Goal:** Finish Transportation Model and get initial results
 
 * **Sunday**
+    * Start development of meso scale optimization model similar to the Japanese paper
 * **Monday**
+    * Finish development of meso scale optimization model code
+    * Finish optimization model visualizations
+    * Finish model formulation/explanation
 * **Tuesday**
+    * Sketch up model inputs in power point slide
 * **Wednesday**
 * **Thursday**
 

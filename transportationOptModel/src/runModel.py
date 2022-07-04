@@ -10,67 +10,91 @@ datFileName = "testRun"
 testMode = True
 
 
-regionDemandRaw = pd.read_excel("../dataInputs/inputSheet.xlsx",sheet_name='regionDemand')
-regionDemandList = []
-for col in regionDemandRaw.columns:
-    if(col == "Time"):
-        continue
-    regionDemand = regionDemandRaw[col].tolist()
-    regionDemandList.append(regionDemand)
+
+
+
 
 inputDataset = {}
-
-
 #just for initial testing input data
 
 #sets
-inputDataset["horizon"] = np.arange(0,len(regionDemandList[0]))
+inputDataset["nodes"] = ["KSA","P1","T1","T2","P2","JP"]
 
-inputDataset["regions"] = [0,1,2]
+inputDataset["portNodes"] = ["P1","P2"]
 
-inputDataset["ports"] = [0,1,2,3]
+inputDataset["oceanNodes"] = ["T1","T2"]
 
-inputDataset["shipTypes"] = [0,1,2]
+inputDataset["regionNodes"] = ["KSA","JP"]
 
-inputDataset["ships"] = [0,1,2,3,4,5,7,8,9,10,11,12,13,14,15]
+inputDataset["shipNodes"] = np.concatenate((inputDataset["portNodes"],inputDataset["oceanNodes"]))
 
+inputDataset["portAccessibleNodes"] = np.concatenate((inputDataset["portNodes"],inputDataset["regionNodes"]))
+
+inputDataset["shipTypes"] = [0,1]
+
+inputDataset["ships"] = [0,1,2,3]
+
+
+regionDemandRaw = pd.read_excel("../dataInputs/inputSheet.xlsx",sheet_name='regionDemand')
+#dropping time col
+regionDemandRaw.drop('Time', inplace=True, axis=1)
+
+regionDemandDict = {}
+for col,regionNode in zip(regionDemandRaw.columns,inputDataset["regionNodes"]):
+    regionDemand = regionDemandRaw[col].tolist()
+    regionDemandDict[regionNode] = regionDemand
+
+#finsihing up horizon set
+inputDataset["horizon"] = np.arange(0,len(regionDemandDict[inputDataset["regionNodes"][0]]))
 
 #params
-inputDataset["capexShip"] = [1.5,3,6]
+inputDataset["capexShip"] = [1.5,4]
 
-inputDataset["capexPortCapacity"] = 2
+inputDataset["capexPortCapacity"] = .01
 
-inputDataset["capexPortStorage"] = 2
+inputDataset["capexPortStorage"] = 0.01
 
-inputDataset["opexFixedShip"] = [1,1.1,1.2]
+inputDataset["opexFixedShip"] = [1,1.1]
 
 inputDataset["opexFixedPortCapacity"] = inputDataset["capexPortCapacity"]*.02
 
 inputDataset["opexFixedPortStorage"] = inputDataset["capexPortStorage"]*.02
 
-inputDataset["opexVariableShip"] = [0.1,0.2,0.2]
+inputDataset["opexVariableShip"] = [2,2]
 
-inputDataset["bulkSize"] = [2,5,15]
+inputDataset["bulkSize"] = [2,10]
 
-inputDataset["demand"] = regionDemandList
+inputDataset["demand"] = regionDemandDict
+
+#creating dict dataset for network connection
+inputDataset["length"] = {}
+nodeNumList = np.arange(len(inputDataset["nodes"]))
+
+tempLengthList = np.eye(len(inputDataset["nodes"]), k=1)  +  np.eye(len(inputDataset["nodes"]), k=-1)
+tempLengthList[1][0] = 0
+tempLengthList[len(inputDataset["nodes"])-1][len(inputDataset["nodes"])-2] = 0
+
+for num1,name1 in zip(nodeNumList,inputDataset["nodes"]):
+    for num2,name2 in zip(nodeNumList,inputDataset["nodes"]):
+        inputDataset["length"][name1,name2] = tempLengthList[num1][num2]
 
 
-inputDataset["length"] = [[0,1,2,3],
-                          [1,0,1,2],
-                          [2,1,0,1],
-                          [3,2,1,0]]
+#make sure final region node is connected to final port node
 
-inputDataset["shipSpeed"] =2
+
+inputDataset["shipSpeed"] = 1
 
 inputDataset["lifetimeShips"] = 20
 
 inputDataset["discountRate"] = .08
 
-#rows are the ports and cols are the regions (1 in region, 0 not in region)
-inputDataset["portRegionParameter"] = [[1,0,0],
-                                       [0,1,0],
-                                       [0,0,1],
-                                       [0,0,1]]
+#key is the port,region value is 1 if in region, 0 not if not in region
+inputDataset["portRegionParameter"] = {("P1","KSA"):1,
+                                       ("P1","JP"):0,
+                                       ("P2","KSA"):0,
+                                       ("P2","JP"):1}
+
+
 
 inputDataset["gEY"] = ((1+inputDataset["discountRate"])**inputDataset["lifetimeShips"] -1)/(inputDataset["discountRate"]*(1+inputDataset["discountRate"])**inputDataset["lifetimeShips"])
 

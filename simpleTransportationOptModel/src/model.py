@@ -16,7 +16,7 @@ class greenAmmoniaTransportation:
             
             
             #creating for loop for writing set structure
-            setNames = ["nodes","portNodes","oceanNodes","regionNodes","horizon","shipTypes","ships","shipNodes","portAccessibleNodes"]
+            setNames = ["ports","regions","ships","shipTypes","horizon"]
             for setName in setNames:
                 f.write(f'set {setName} := ')
                 for i in inputDataset[setName]:
@@ -33,9 +33,9 @@ class greenAmmoniaTransportation:
 
             singleParamIndexNames = ["capexShip","opexFixedShip","opexVariableShip","bulkSize"]
 
-            doubleParamIndexNames = {"demand":["regionNodes","horizon"],
-                                     "length":["nodes","nodes"],
-                                     "portRegionParameter":["portNodes","regionNodes"]}
+            doubleParamIndexNames = {"demand":["regions","horizon"],
+                                     "length":["ports","ports"],
+                                     "portRegionParameter":["ports","regions"]}
             
             for paramName in paramNames:
                 if paramName in setNames:
@@ -107,29 +107,15 @@ class greenAmmoniaTransportation:
 
         ################### START SETS  ###################
         
-        #set of total nodes that import/export ammonia
-        model.nodes = Set(initialize= inputDataset["nodes"])
-        model.nodes.construct()       
+        #set of total ports that can import/export ammonia
+        model.ports = Set(initialize= inputDataset["ports"])
+        model.ports.construct()       
          
-        #set of port nodes in simulation
-        model.portNodes = Set(initialize= inputDataset["portNodes"])
-        model.portNodes.construct()
-        
-        #set of ocean nodes
-        model.oceanNodes = Set(initialize = inputDataset["oceanNodes"])
-        model.oceanNodes.construct()
-
-        #set of region nodes
-        model.regionNodes = Set(initialize = inputDataset["regionNodes"])
-        model.regionNodes.construct()
+      
+        #set of regions that ports belong to
+        model.regions = Set(initialize = inputDataset["regions"])
+        model.regions.construct()
            
-        #defining nodes which ships can access (ports or ocean nodes)   
-        model.shipNodes = Set(initialize = inputDataset["shipNodes"])
-        model.shipNodes.construct()
-
-        #defining nodes which ships can access (ports or ocean nodes)   
-        model.portAccessibleNodes = Set(initialize = inputDataset["portAccessibleNodes"])
-        model.portAccessibleNodes.construct()
         
         #number of ships that can be built in the simulation (done for simplicity)
         model.ships = RangeSet(0,len(inputDataset["ships"])-1)
@@ -137,8 +123,8 @@ class greenAmmoniaTransportation:
         #set of ship model types that can be built for ships in simulation
         model.shipTypes = RangeSet(0,len(inputDataset["shipTypes"])-1)
         
-        #timesteps in simulation-based on number of days in the demand
-        model.horizon = RangeSet(0,len(inputDataset["demand"][inputDataset["regionNodes"][0]])-1)
+        #timesteps in simulation-based on number of months in the demand
+        model.horizon = RangeSet(0,len(inputDataset["demand"][inputDataset["regions"][0]])-1)
         ################### END SETS   ###################
 
 
@@ -168,14 +154,14 @@ class greenAmmoniaTransportation:
         model.bulkSize = Param(model.shipTypes)          
         
         #demand for region r at timestep t
-        model.demand = Param(model.regionNodes,model.horizon)       
+        model.demand = Param(model.regions,model.horizon)       
         
-        #length of route from two nodes (length of zero means the two nodes are not connected)
-        model.length = Param(model.nodes,model.nodes)
+        #length of route from two ports (length of zero means the two ports are not connected)
+        model.length = Param(model.ports,model.ports)
         
         #binary indicator parameter on whether port p is in region r
         # if it is, value is 1 else, value is zero
-        model.portRegionParameter = Param(model.portNodes,model.regionNodes)
+        model.portRegionParameter = Param(model.ports,model.regions)
         
         #ship speed for simulation-assume all ships travel at the same speed
         model.shipSpeed = Param()
@@ -195,30 +181,30 @@ class greenAmmoniaTransportation:
         ################### START DECISION VARIABLES    ###################
         
         #whether to build the ship in that model type (binary, 1-yes, 0-no)
-        model.X = Var(model.ships,model.shipTypes,domain=Binary,initialize=1)
+        model.B = Var(model.ships,model.shipTypes,domain=Binary,initialize=0)
 
-        #flow of fuel (ammonia) from node i to node j for ship s at time t
-        model.fuelFlowShip = Var(model.ships,model.shipNodes,model.shipNodes,model.horizon,domain=NonNegativeReals)
+        #flow of fuel (ammonia or hydrogen) from port i to port j for ship s at time t
+        model.X = Var(model.ships,model.ports,model.ports,model.horizon,domain=NonNegativeReals)
         
-        #available fuel at ship node s
-        model.fuelAvailShip = Var(model.ships,model.oceanNodes,model.horizon,domain=NonNegativeReals)
+        #whether to activate port link connection i to j
+        model.Y = Var(model.ships,model.ports,model.ports,model.horizon,domain=Binary)
         
-        #indicator variable on where ship s is
-        #if at node n at time t, SL = 1, else = 0
-        model.shipLocation = Var(model.ships,model.shipNodes,model.horizon,domain=Binary)
-
-        #flow of fuel (ammonia) from node i to node j for port p at time t
-        # can be inflow from supply or outflow to demand
-        model.fuelFlowStorage = Var(model.portAccessibleNodes,model.portAccessibleNodes,model.horizon,domain=NonNegativeReals)
-  
+        
+        
         #fuel available at port p
-        model.faPort = Var(model.portNodes,model.horizon,domain=NonNegativeReals) 
+        model.faPort = Var(model.ports,model.horizon,domain=NonNegativeReals)
         
+
+        #flow of fuel (ammonia) from port i to region r at time t
+        # can be inflow from supply or outflow to demand
+        model.fuelFlowStorage = Var(model.ports,model.regions,model.horizon,domain=Reals)
+  
+
         #capacity of port storage p
-        model.capacityStorage = Var(model.portNodes,domain=NonNegativeReals)
+        model.capacityStorage = Var(model.ports,domain=NonNegativeReals)
         
         #capacity for importing/exporting ammonia at port
-        model.capacityPort =Var(model.portNodes,domain=NonNegativeReals)
+        model.capacityPort =Var(model.ports,domain=NonNegativeReals)
         
         ################### END DECISION VARIABLES    ###################
 
@@ -228,14 +214,14 @@ class greenAmmoniaTransportation:
         #sum up the CAPEX, fixed OPEX, and variable OPEX costs for cargo ships and port storage/capacity 
         def cargoShipCosts(model):
             #sum of capex for each ship you build + the fixed costs + variable costs discounted 
-            return sum(sum(model.capexShip[shipType]*model.X[ship,shipType] +
-                           model.gEY*(model.opexFixedShip[shipType]*model.X[ship,shipType] +
+            return sum(sum(model.capexShip[shipType]*model.B[ship,shipType] +
+                           model.gEY*(model.opexFixedShip[shipType]*model.B[ship,shipType] +
                                           sum(
                                               sum(
                                                   sum(
-                                                      model.opexVariableShip[shipType]*model.length[i,j]*model.fuelFlowShip[ship,i,j,t] for t in model.horizon)
-                                                  for j in model.shipNodes if j != i )
-                                              for i in model.shipNodes)
+                                                      model.opexVariableShip[shipType]*(2*model.length[i,j]/model.shipSpeed)*model.X[ship,i,j,t] for t in model.horizon)
+                                                  for j in model.ports if j != i )
+                                              for i in model.ports)
                                       ) for shipType in model.shipTypes)
                        for ship in model.ships)
                 
@@ -243,7 +229,7 @@ class greenAmmoniaTransportation:
             #sum of capex + fixed OPEX (assuming no variable OPEX) and then looking at storage and capacity costs
             return (sum(model.capacityPort[port]*(model.capexPortCapacity + model.gEY*model.opexFixedPortCapacity)
                 + model.capacityStorage[port]*(model.capexPortStorage + model.gEY*model.opexFixedPortStorage)
-            for port in model.portNodes))
+            for port in model.ports))
           
         def minCost_rule(model):
             return (cargoShipCosts(model) + portCosts(model))
@@ -254,69 +240,53 @@ class greenAmmoniaTransportation:
 
 
         ###################       START CONSTRAINTS     ###################
-        #ship built indicator definition
-        def shipBuiltIndicatorRule(model,ship):
-            return (sum(model.X[ship,shipType] for shipType in model.shipTypes) <= 1)
-        model.shipBuiltIndicatorConstraint = Constraint(model.ships,rule=shipBuiltIndicatorRule)        
+        #can only build 1 ship from the available models
+        def shipBuiltMax1Rule(model,ship):
+            return (sum(model.B[ship,shipType] for shipType in model.shipTypes) <= 1)
+        model.shipBuiltMax1Constraint = Constraint(model.ships,rule=shipBuiltMax1Rule)        
         
 
-        #if you build a ship, the ship needs to be somewhere on network
-        def shipNetworkPlaceRule(model,ship,time):
-            return(sum(model.shipLocation[ship,node,time] for node in model.shipNodes) == sum(model.X[ship,shipType] for shipType in model.shipTypes))
-        model.shipNetworkPlaceConstraint = Constraint(model.ships,model.horizon,rule=shipNetworkPlaceRule)        
+        #can only send a ship from port i to port j if the ship model is built and max capacity of tanker specs
+        def shipFlowRule(model,ship,time):
+            return (sum(
+                sum(
+                    model.X[ship,i,j,time] for i in model.ports)
+             for j in model.ports) <= sum(model.B[ship,shipType]*model.bulkSize[shipType] for shipType in model.shipTypes))
+        model.shipFlowConstraint = Constraint(model.ships,model.horizon,rule=shipFlowRule)        
+                
 
-        #ports can only interact with demand regions if they are connected
-        def nodePortConnectionRule(model,nodeI,nodeJ,time):
-            return (model.fuelFlowStorage[nodeI,nodeJ,time] <= model.length[nodeI,nodeJ]*sum(model.capacityStorage[port] for port in model.portNodes))
-        model.nodePortConnectionConstraint =  Constraint(model.portAccessibleNodes,model.portAccessibleNodes,
-                                                        model.horizon,rule=nodePortConnectionRule)        
-            
-    
-        #can only transfer fuel if the nodes are connected and at the home node
-        def nodeShipConnectionRule(model,ship,nodeI,nodeJ,time):
-            return (model.fuelFlowShip[ship,nodeI,nodeJ,time] <= ( model.shipLocation[ship,nodeI,time])*model.length[nodeI,nodeJ]*sum(model.bulkSize[shipType] for shipType in model.shipTypes if nodeI != nodeJ))            
+        #max fuel that can either be deployed to another port or used to meet demand at port p
+        def maxFuelFlowRule(model,i,time):
+            return (sum(
+                sum(
+                    model.X[ship,i,j,time] for j in model.ports)
+             for ship in model.ships) + sum(model.portRegionParameter[i,r]*model.fuelFlowStorage[i,r,time] for r in model.regions) <= model.faPort[i,time])
+        model.maxFuelFlowConstraint = Constraint(model.ports,model.horizon,rule=maxFuelFlowRule)        
+           
 
-        model.nodeShipConnectionConstraint = Constraint(model.ships,model.shipNodes,model.shipNodes,model.horizon,rule=nodeShipConnectionRule)
+        #activate port link rule-can only send a ship on one port route per month
+        def activatePortLinkRule(model,ship,time):
+            return( sum(sum(model.Y[ship,i,j,time] for j in model.ports) for i in model.ports) <= 1)
+        model.activatePortLinkConstraint = Constraint(model.ships,model.horizon,rule=activatePortLinkRule)        
 
-
-        #ship can only move from location to location
-        def shipLocNodeConnectionRule(model,ship,nodeJ,time):
-            if((time == 0)):
-                return(model.shipLocation[ship,nodeJ,time] >= 0)
-            return((model.shipLocation[ship,nodeJ,time]) <= sum(model.shipLocation[ship,nodeI,time-1]*model.length[nodeI,nodeJ] for nodeI in model.shipNodes))
-        model.shipLocNodeConnectionConstraint = Constraint(model.ships,model.shipNodes,model.horizon,rule=shipLocNodeConnectionRule)
- 
-        #fuel available definition
-        #previous fuel + any flows in - any flows out
-        def fuelAvailShipDefinitionRule(model,ship,node,time):
-            if(time == 0):
-                return(model.fuelAvailShip[ship,node,time] == 0)
-            else:
-                return((model.fuelAvailShip[ship,node,time-1] + 
-                        sum( 
-                                model.fuelFlowShip[ship,node2,node,time-1] - model.fuelFlowShip[ship,node,node2,time-1]                                  
-                                for node2 in model.shipNodes))
-                       == model.fuelAvailShip[ship,node,time]
-                    
-                )
-        model.fuelAvailShipDefinitionConstraint = Constraint(model.ships,model.oceanNodes,model.horizon,rule=fuelAvailShipDefinitionRule)
-
-
+        #activate port link rule implementation-can only send a ship on one port route per month
+        def activatePortFlowRule(model,ship,i,j,time):
+            return(model.X[ship,i,j,time] <= model.length[i,j]*model.Y[ship,i,j,time]*sum(model.bulkSize[shipType] for shipType in model.shipTypes))
+        model.activatePortFlowConstraint = Constraint(model.ships,model.ports,model.ports,model.horizon,rule=activatePortFlowRule)        
         
-  
         #port import export capacity
-        def portImportExportCapacityRule(model,port,time):
+        def portImportExportCapacityRule(model,i,time):
             return(sum(
                     sum(
-                            model.fuelFlowShip[ship,node,port,time] + model.fuelFlowShip[ship,port,node,time]
-                        for node in model.oceanNodes)
-                for ship in model.ships)  <= model.capacityPort[port])  
-        model.portImportExportCapacityConstraint = Constraint(model.portNodes,model.horizon,rule=portImportExportCapacityRule) 
+                            model.X[ship,i,j,time] + model.X[ship,j,i,time]
+                        for j in model.ports)
+                for ship in model.ships)  <= model.capacityPort[i])  
+        model.portImportExportCapacityConstraint = Constraint(model.ports,model.horizon,rule=portImportExportCapacityRule) 
   
         #port export capacity rule
         def availFuelCapacityRule(model,port,time):
             return(model.faPort[port,time] <= model.capacityStorage[port])
-        model.availFuelCapacityConstraint = Constraint(model.portNodes,model.horizon,rule=availFuelCapacityRule) 
+        model.availFuelCapacityConstraint = Constraint(model.ports,model.horizon,rule=availFuelCapacityRule) 
     
 
 
@@ -327,42 +297,24 @@ class greenAmmoniaTransportation:
                 return(model.faPort[port,0] ==  0)
             else:
                 return(
-                    (model.faPort[port,time-1] + 
-                     sum(model.portRegionParameter[port,region]*(model.fuelFlowStorage[region,port,time-1]-model.fuelFlowStorage[port,region,time-1]) 
-                         for region in model.regionNodes) +
+                    (model.faPort[port,time-1] - 
+                     sum(model.portRegionParameter[port,region]*(model.fuelFlowStorage[port,region,time-1]) 
+                         for region in model.regions) +
                      sum(
-                         sum(model.fuelFlowShip[ship,ocean,port,time-1] - model.fuelFlowShip[ship,port,ocean,time-1]
-                            for ocean in model.oceanNodes) 
+                         sum(model.X[ship,i,port,time-1] - model.X[ship,port,i,time-1]
+                            for i in model.ports) 
                          for ship in model.ships)
                      ) == model.faPort[port,time] 
                 )
-        model.availFuelDefinitionConstraint = Constraint(model.portNodes,model.horizon,rule=availFuelDefinitionRule) 
-
-
-        def maxFuelTransferRule(model,port,time):
-            if(time == 0):
-                return(model.faPort[port,0] ==  0)
-            else:
-                return(
-                    (
-                     sum(model.fuelFlowStorage[port,region,time]
-                         for region in model.regionNodes) +
-                     sum(
-                         sum(model.fuelFlowShip[ship,port,ocean,time]
-                            for ocean in model.oceanNodes) 
-                         for ship in model.ships)
-                     ) <= model.faPort[port,time] 
-                )
-        model.maxFuelTransferConstraint = Constraint(model.portNodes,model.horizon,rule=maxFuelTransferRule) 
-            
+        model.availFuelDefinitionConstraint = Constraint(model.ports,model.horizon,rule=availFuelDefinitionRule) 
+ 
 
         #meet demand constraint for network
         # negative demand means the port is supplying fuel
         def meetDemandRule(model,region,time):
-            return(sum(model.portRegionParameter[port,region]*(model.fuelFlowStorage[port,region,time] - model.fuelFlowStorage[region,port,time]) for port in model.portNodes) == model.demand[region,time])
-        model.meetDemandConstraint = Constraint(model.regionNodes,model.horizon,rule=meetDemandRule)        
+            return(sum(model.portRegionParameter[port,region]*(model.fuelFlowStorage[port,region,time]) for port in model.ports) == model.demand[region,time])
+        model.meetDemandConstraint = Constraint(model.regions,model.horizon,rule=meetDemandRule)        
     
-        
         
         ###################       END CONSTRAINTS     ###################
 
@@ -396,18 +348,18 @@ class greenAmmoniaTransportation:
         shipBuiltDataset = np.zeros((len(inputDataset["ships"]),len(inputDataset["shipTypes"])))
         for ship in np.arange(len(inputDataset["ships"])):
             for shipType in np.arange(len(inputDataset["shipTypes"])):
-                shipBuiltDataset[ship][shipType] = instance.X[ship,shipType].value
+                shipBuiltDataset[ship][shipType] = instance.B[ship,shipType].value
 
 
         fuelFlowDataset = np.zeros((len(inputDataset["ships"]),len(inputDataset["horizon"])))
         for ship in np.arange(len(inputDataset["ships"])):
             for time in np.arange(len(inputDataset["horizon"])):
                 totalCount = 0
-                for nodeI in instance.shipNodes:
-                    for nodeJ in instance.shipNodes:
-                        if(instance.fuelFlowShip[ship,nodeI,nodeJ,time].value == None):
+                for nodeI in instance.ports:
+                    for nodeJ in instance.ports:
+                        if(instance.X[ship,nodeI,nodeJ,time].value == None):
                             continue
-                        totalCount += instance.fuelFlowShip[ship,nodeI,nodeJ,time].value
+                        totalCount += instance.X[ship,nodeI,nodeJ,time].value
                 fuelFlowDataset[ship][time] = totalCount
         #print("fuel flow ship")
         #print(fuelFlowDataset)
@@ -457,36 +409,23 @@ class greenAmmoniaTransportation:
         fuelFlowShipDataset = {}#np.zeros((len(inputDataset["ships"]),len(inputDataset["shipNodes"]),len(inputDataset["shipNodes"]),len(inputDataset["horizon"])))
         for ship in inputDataset["ships"]:
             for time in np.arange(len(inputDataset["horizon"])):
-                for nodeI in instance.shipNodes:
-                    for nodeJ in instance.shipNodes:
-                        fuelFlowShipDataset[ship,nodeI,nodeJ,time] = instance.fuelFlowShip[ship,nodeI,nodeJ,time].value
+                for nodeI in instance.ports:
+                    for nodeJ in instance.ports:
+                        fuelFlowShipDataset[ship,nodeI,nodeJ,time] = instance.X[ship,nodeI,nodeJ,time].value
         masterDataFrame["Fuel Flow Ship"] = fuelFlowShipDataset
  
         fuelFlowStorageDataset = {}#np.zeros((len(inputDataset["ships"]),len(inputDataset["shipNodes"]),len(inputDataset["shipNodes"]),len(inputDataset["horizon"])))
         for time in np.arange(len(inputDataset["horizon"])):
-            for nodeI in instance.portAccessibleNodes:
-                for nodeJ in instance.portAccessibleNodes:
-                        fuelFlowStorageDataset[nodeI,nodeJ,time] = instance.fuelFlowStorage[nodeI,nodeJ,time].value
+            for nodeI in instance.ports:
+                for nodeJ in instance.regions:
+                    fuelFlowStorageDataset[nodeI,nodeJ,time] = instance.fuelFlowStorage[nodeI,nodeJ,time].value
         masterDataFrame["Fuel Flow Storage"] = fuelFlowStorageDataset
     
-        
-        #looking at when each ship is traveling or in port
-        #print(instance.indicatorInPort[1,0,0].value)
-        shipLocationDataset = {}#np.zeros((len(inputDataset["ships"]),len(inputDataset["horizon"])))
-        for ship in np.arange(len(inputDataset["ships"])):
-            if(sum(instance.X[ship,shipType].value for shipType in instance.shipTypes) == 0):
-                continue
-            for time in np.arange(len(inputDataset["horizon"])):
-                for node in inputDataset["shipNodes"]:
-                    if(instance.shipLocation[ship,node,time].value == 1):
-                        shipLocationDataset[ship,time] = node
-                    
-        masterDataFrame["Ship Location"] = shipLocationDataset
 
 
         #looking at fuel available in storage
         portAvailDataset = {}#np.zeros((len(inputDataset["portNodes"]),len(inputDataset["horizon"])))
-        for port in inputDataset["portNodes"]:
+        for port in inputDataset["ports"]:
             for time in np.arange(len(inputDataset["horizon"])):
                 portAvailDataset[port,time] = instance.faPort[port,time].value
         masterDataFrame["Port Fuel Avail"] = portAvailDataset
@@ -495,7 +434,7 @@ class greenAmmoniaTransportation:
         print('port storage')
         portStorageDataset = {}
         portTransferCapacityDataset = {}
-        for port in inputDataset["portNodes"]:
+        for port in inputDataset["ports"]:
             portStorageDataset[port] = instance.capacityStorage[port].value
             portTransferCapacityDataset[port] = instance.capacityPort[port].value       
             
