@@ -2,7 +2,7 @@
 This repo contains the work I have done and any presentations I made on my work around the sustainability surrounding green ammonia and hydrogen production at KAUST for the summer in relevance to Saudi Arabia.
 
 * Note: the workweek in Saudi Arabia is from Sunday-> Thursday and thus structured my weekly journal in accordance.
-
+* Helpful info: jupyter notebook --notebook-dir=D:/
 
 ### Table of Contents
 **[Week 1](#week-1)**<br>
@@ -168,7 +168,7 @@ This repo contains the work I have done and any presentations I made on my work 
         * Compromise between single route and cost identification and optimization of entire transportation network
 
 ## Week 9
-**Weekly Goal:** Finish Transportation Model and get initial results
+**Weekly Goal:** Finish Transportation Model and finalize visualizations
 
 * **Sunday**
     * Start development of meso scale optimization model similar to the Japanese paper
@@ -177,15 +177,27 @@ This repo contains the work I have done and any presentations I made on my work 
     * Finish optimization model visualizations
     * Finish model formulation/explanation
 * **Tuesday**
-    * Sketch up model inputs in power point slide
+    * Sketch up model visualizations and outline in power point slide
 * **Wednesday**
+    * Test multiple ports in regions for transportation model
+    * Weekly meeting on work get feedback on model
 * **Thursday**
-
+    * Work on cracking side and identify costs associated with the development
 ## Week 10
-**Weekly Goal:** 
+**Weekly Goal:** Start gathering relevant data and run initial model
 
 * **Sunday**
+    * Ideate on the demand scenarios and identify various resources that exist
 * **Monday**
+    * Investigate runtime reductions
 * **Tuesday**
+    * Create google colab format
 * **Wednesday**
+    * Develop threading for google colab 
+    * Create paper draft formulation
 * **Thursday**
+    * Transfer hydrogen model over to google colab space
+
+
+## Week 11
+**Weekly Goal:** Present results and mock up draft

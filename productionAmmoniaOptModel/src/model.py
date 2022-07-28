@@ -358,9 +358,9 @@ class greenAmmoniaProduction:
         # zero at beginning and equal to previous available amount + new energy stored - (energy deployed + energy required to deploy it))
         def bsAvailEnergyRule(model,t):
             if t == 0:
-                return(model.bsAvail[0] == 0)
+                return(model.bsAvail[0] == .3*model.bsCapacity)
             else:
-                return(model.bsAvail[t] == model.bsAvail[t-1] + model.bsStore[t] - (model.bsDeploy[t])/model.bsDeployEfficiency)
+                return(model.bsAvail[t] == model.bsAvail[t-1] + model.bsStore[t-1] - (model.bsDeploy[t-1])/model.bsDeployEfficiency)
         model.bsAvailEnergyDefConstraint = Constraint(model.horizon,rule=bsAvailEnergyRule)
 
         #max available energy you can have in storage is storage capacity
@@ -371,18 +371,12 @@ class greenAmmoniaProduction:
         #max amount of energy you can store in bs is max capacity - current energy charge at start - energy you deploy in hour
         #for simplicity, I assume you can not store energy in the hour and deploy it within the same hour-this would require finer resolution then hourly capacity factors
         def bsStoreUpperBoundRule(model,t):
-            if(t==0):
-                return(model.bsStore[t] <= model.bsCapacity)
-            else:
-                return(model.bsStore[t] <= model.bsCapacity - model.bsAvail[t-1])
+            return(model.bsStore[t] <= model.bsCapacity - model.bsAvail[t])
         model.bsStoreUpperBoundConstraint = Constraint(model.horizon,rule=bsStoreUpperBoundRule)
         
         #energy deployed (and required) from storage must be less than energy available
         def bsDeployUpperBoundRule(model,t):
-            if(t==0):
-                return(model.bsDeploy[t] == 0)
-            else:
-                return(model.bsDeploy[t]/model.bsDeployEfficiency <= model.bsAvail[t-1])
+            return(model.bsDeploy[t]/model.bsDeployEfficiency <= model.bsAvail[t])
                 
         model.bsDeployUpperBoundConstraint = Constraint(model.horizon,rule=bsDeployUpperBoundRule)
 
@@ -394,10 +388,7 @@ class greenAmmoniaProduction:
 
         #fuel cell hydrogen deployment definition (need to convert kg to MWh and then factor in efficiency of fuel cell)
         def fcDeployUpperBoundRule(model,t):
-            if(t==0):
-                return(model.fcDeploy[t] == 0)
-            else:
-                return(model.fcDeploy[t] <= model.fcDeployEfficiency*model.energyDensityFC*model.hsAvail[t-1])
+            return(model.fcDeploy[t] <= model.fcDeployEfficiency*model.energyDensityFC*model.hsAvail[t])
         model.fcDeployUpperBoundConstraint = Constraint(model.horizon,rule=fcDeployUpperBoundRule)
         
 
@@ -407,7 +398,7 @@ class greenAmmoniaProduction:
             if t == 0:
                 return(model.hsAvail[0] == 0)
             else:
-                return(model.hsAvail[t] == (1-model.hsVaporizationRate)*model.hsAvail[t-1] + model.hsStore[t] - ((model.hsDeploy[t])/model.hsDeployEfficiency) - (model.fcDeploy[t]/(model.fcDeployEfficiency*model.energyDensityFC)))
+                return(model.hsAvail[t] == (1-model.hsVaporizationRate)*model.hsAvail[t-1] + model.hsStore[t-1] - ((model.hsDeploy[t-1])/model.hsDeployEfficiency) - (model.fcDeploy[t-1]/(model.fcDeployEfficiency*model.energyDensityFC)))
         model.hsAvailEnergyDefConstraint = Constraint(model.horizon,rule=hsAvailEnergyRule)
 
         #max available hydrogen in storage is storage capacity
@@ -417,18 +408,12 @@ class greenAmmoniaProduction:
         
         #max amount of hydrogen you can store in hs is remaining space available (diff of hydrogen capacity - hydrogen available)
         def hsStoreUpperBoundRule(model,t):
-            if(t==0):
-                return(model.hsStore[t] <= model.hsCapacity)
-            else:
-                return(model.hsStore[t] <= model.hsCapacity - model.hsAvail[t-1])
+            return(model.hsStore[t] <= model.hsCapacity - model.hsAvail[t])
         model.hsStoreUpperBoundConstraint = Constraint(model.horizon,rule=hsStoreUpperBoundRule)
         
         #hydrogen deployed (and also required to deploy) from storage must be less than hydrogen available
         def hsDeployUpperBoundRule(model,t):
-            if(t==0):
-                return(model.hsDeploy[t] == 0)
-            else:
-                return(model.hsDeploy[t]/model.hsDeployEfficiency <= model.hsAvail[t-1])
+            return(model.hsDeploy[t]/model.hsDeployEfficiency <= model.hsAvail[t])
         model.hsDeployUpperBoundConstraint = Constraint(model.horizon,rule=hsDeployUpperBoundRule)
                 
         #amount of hydrogen to store (and lost in storing) must be less than or equal to hydrogen generated from all EY stacks

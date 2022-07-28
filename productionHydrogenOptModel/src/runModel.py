@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 from model import greenHydrogenProduction
 from datetime import datetime
-import os
 
 
 #dont include the .dat ending or path location

@@ -2,18 +2,13 @@ import pandas as pd
 import numpy as np
 from model import greenAmmoniaProduction
 from datetime import datetime
-import os
 
 
 #dont include the .dat ending or path location
 datFileName = "testRun"
 testMode = True
 startDay = 0
-endDay = 75
-'''datFileName = "testRun"
-testMode = True
-startDay = 0
-endDay = 25'''
+endDay = 180
 transmissionLosses = .02
 
 pdSingleParamDataset = pd.read_excel("../dataInputs/inputSheet.xlsx",sheet_name='systemSettings')

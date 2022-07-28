@@ -16,9 +16,9 @@ def shipFuelFlow(graph,time):
             totalShipFlow = sum(shipFlowDataset[ship,node1,node2,time] for ship in modelDataset["Input Parameters"]["ships"])
 
             #if port pair in node list, only change the edge if there is any flow
-            if((totalShipFlow != 0) or ([node1,node2] not in skipNodeList)):
+            if(([node1,node2] not in skipNodeList) or (totalShipFlow != 0)):
                 try:
-                    graph[node1][node2]["weight"] = 2*totalShipFlow/maxFuelFlow
+                    graph[node1][node2]["weight"] = 5*totalShipFlow/maxFuelFlow
                 except KeyError:
                     continue
                 #make sure you don't accidentally reset the edge
@@ -30,7 +30,7 @@ def portFuelFlow(graph,time):
     for port in modelDataset["Input Parameters"]["ports"]:
         for region in modelDataset["Input Parameters"]["regions"]:
             if((storageFlowDataset[port,region,time] is not None)):
-                graph[port][region]["weight"] = 2*np.abs(storageFlowDataset[port,region,time])/maxFuelFlow
+                graph[port][region]["weight"] = 5*np.abs(storageFlowDataset[port,region,time])/maxFuelFlow
 
 
     return graph
@@ -41,9 +41,9 @@ def nodeSizes(time):
     nodeSizeList = []
     for node in nodeNames:
         if(node in modelDataset["Input Parameters"]["ports"]):
-            nodeSizeList.append(fuelAvailDataset[node,time])
+            nodeSizeList.append(5*fuelAvailDataset[node,time])
         else:
-            nodeSizeList.append(np.abs(fuelDemandDataset[node][time]))
+            nodeSizeList.append(5*np.abs(fuelDemandDataset[node][time]))
     
     return(nodeSizeList)
 
@@ -52,9 +52,13 @@ def resetGraph(graph):
     for node1 in modelDataset["Input Parameters"]["ports"]:
         for node2 in modelDataset["Input Parameters"]["ports"]:
             if(networkDataset[node1,node2] > 0):
-                graph.add_edge(node1,node2,color="blue")
-                
-        
+                graph.add_edge(node1,node2,weight=0,color="black")
+            
+    #resetting edges
+    for node1 in modelDataset["Input Parameters"]["ports"]:
+        for region in modelDataset["Input Parameters"]["regions"]:
+            if((portRegionDataset[node1,region ] > 0)) :
+                graph.add_edge(node1,region,weight=0,color="black")
     return(graph)
 
 def removeEdges(graph):
@@ -64,6 +68,12 @@ def removeEdges(graph):
         for node2 in modelDataset["Input Parameters"]["ports"]:
             if((node1,node2) in edgeList):
                 graph.remove_edge(node1,node2)
+                
+    for node1 in modelDataset["Input Parameters"]["ports"]:
+        for region in modelDataset["Input Parameters"]["regions"]:
+            if((node1,region) in edgeList):
+                graph.remove_edge(node1,region)
+
     return(graph)
 
 
@@ -71,15 +81,21 @@ def removeEdges(graph):
 #reading in the global country map
 fileName =  "shapeFile/world-administrative-boundaries"
 sf = shapefile.Reader(fileName) # whichever file
-fig = plt.figure()
+fig = plt.figure(figsize=(8,6))
 ax = fig.add_subplot(111)
 
 
-#setting up to 
+#setting up graph visualization 
 minLonX =-20
 maxLonX = 150
 minLatY = 0
 maxLatY = 90
+
+#graph delay for animation in seconds
+graphDelay = 1.5
+
+#scaling factor for edge and node displays
+scalingSize = 5
 
 
 #drawing map
@@ -90,9 +106,8 @@ for shape in sf.shapes():
     intervals = list(shape.parts) + [len(shape.points)]
 
     for (i, j) in zip(intervals[:-1], intervals[1:]):
-        ax.plot(*zip(*points[i:j]),color="gray",linewidth=.5)
-
-
+        #ax.plot(*zip(*points[i:j]),color="gray",linewidth=.25, alpha=0.3)
+        ax.fill(*zip(*points[i:j]),color="green", alpha=0.3)
 #reading in model output data
 pkl_file = open('../modelOutputs/testRun.pkl', 'rb')
 
@@ -110,26 +125,22 @@ graph = nx.Graph()
 latDict = {
     "KSA": 24,
     "JEDDAH": 22.4,
-    "TOKYO": 34,
-    "JP":35.7,
-    "BUSAN": 35.5 ,
-    "SK": 37.35,
+    "DAMMAM": 26,
+    "TOKYO": 34.83,
+    "JP":38.3,
     "HAMBURG": 53.5,
-    "DE": 50 
+    "DE": 50
 }
 lonDict = {
     "KSA": 45.66,
     "JEDDAH": 39.6,
+    "DAMMAM": 50,
     "TOKYO": 138,
-    "JP":139.8,
-    "BUSAN": 129.28,
-    "SK": 127,
+    "JP":140,
     "HAMBURG": 9.96,
-    "DE": 10.52 
+    "DE": 10.52
 }
 
-#graph delay for animation in seconds
-graphDelay = 1
 
 
 colorMap = []
@@ -147,14 +158,14 @@ networkDataset = modelDataset["Input Parameters"]["length"]
 for node1 in modelDataset["Input Parameters"]["ports"]:
     for node2 in modelDataset["Input Parameters"]["ports"]:
         if((networkDataset[node1,node2] > 0)) :
-            graph.add_edge(node1,node2,weight=1)
+            graph.add_edge(node1,node2,weight=1,color="gray")
 
 #adding edges between ports and regions
 portRegionDataset = modelDataset["Input Parameters"]["portRegionParameter"]
 for node1 in modelDataset["Input Parameters"]["ports"]:
     for node2 in modelDataset["Input Parameters"]["regions"]:
         if((portRegionDataset[node1,node2] > 0)) :
-            graph.add_edge(node1,node2,weight=1)
+            graph.add_edge(node1,node2,weight=1,color="gray")
 
 #getting max fuel flow
 maxStorageFlow = max([value for value in storageFlowDataset.values() if value is not None])
@@ -162,21 +173,30 @@ maxShipFlow = max([value for value in shipFlowDataset.values() if value is not N
 maxFuelFlow = max(maxStorageFlow,maxShipFlow)            
 
 
-#graphing initial structure
-nx.draw(graph, pos=nx.get_node_attributes(graph,'Position'),node_color=colorMap,
-        node_size=2,ax=ax)
 
 
-for i in np.arange(0,3): 
+
+
+for i in np.arange(0,4):
+    #graphing initial structure
+    nx.draw(graph, pos=nx.get_node_attributes(graph,'Position'),node_color=colorMap,
+            node_size=2,edge_color = "gray",ax=ax)
+    pause(2)
+    ax.collections[0].remove()
+    ax.collections[0].remove()
     for time in modelDataset["Input Parameters"]["horizon"]:
+        
+        #resting graph
+        graph = removeEdges(graph)
         graph = resetGraph(graph)
+        
+        #getting ship and fuel flow
         graph = shipFuelFlow(graph,time)
         graph = portFuelFlow(graph,time)
         
         #getting weights and locations
         weights = nx.get_edge_attributes(graph,'weight').values()
         positions = nx.get_node_attributes(graph,'Position')
-        
 
         #getUpdated node sizes
         nodeSizeList = nodeSizes(time) 
@@ -186,12 +206,14 @@ for i in np.arange(0,3):
                 width=list(weights),
                 node_color=colorMap,
                 node_size=nodeSizeList,
+                edge_color = "black",
                 ax=ax)
+        #plotting time on frame
         frame = plt.text(66,90,str(time))
         pause(graphDelay)
         #removes the previous flow,ship locations, and text for the new update graph
-        ax.collections[1].remove()
-        ax.collections[1].remove()
+        ax.collections[0].remove()
+        ax.collections[0].remove()
         Artist.remove(frame)
         
 print("done")

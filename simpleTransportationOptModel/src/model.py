@@ -117,10 +117,10 @@ class greenAmmoniaTransportation:
         model.regions.construct()
            
         
-        #number of ships that can be built in the simulation (done for simplicity)
+        #number of ships that can be chartered in the simulation (done for simplicity)
         model.ships = RangeSet(0,len(inputDataset["ships"])-1)
                         
-        #set of ship model types that can be built for ships in simulation
+        #set of ship model types that can be chartered for ships in simulation
         model.shipTypes = RangeSet(0,len(inputDataset["shipTypes"])-1)
         
         #timesteps in simulation-based on number of months in the demand
@@ -129,8 +129,6 @@ class greenAmmoniaTransportation:
 
 
         ################### START PARAMETERS  ###################
-        #CAPEX for ship type m 
-        model.capexShip = Param(model.shipTypes)
 
         #CAPEX for port capacity on kg basis
         model.capexPortCapacity = Param()
@@ -179,15 +177,12 @@ class greenAmmoniaTransportation:
 
 
         ################### START DECISION VARIABLES    ###################
-        
-        #whether to build the ship in that model type (binary, 1-yes, 0-no)
-        model.B = Var(model.ships,model.shipTypes,domain=Binary,initialize=0)
 
         #flow of fuel (ammonia or hydrogen) from port i to port j for ship s at time t
         model.X = Var(model.ships,model.ports,model.ports,model.horizon,domain=NonNegativeReals)
         
         #whether to activate port link connection i to j
-        model.Y = Var(model.ships,model.ports,model.ports,model.horizon,domain=Binary)
+        model.Y = Var(model.ships,model.shipTypes,model.ports,model.ports,model.horizon,domain=Binary)
         
         
         
@@ -214,16 +209,20 @@ class greenAmmoniaTransportation:
         #sum up the CAPEX, fixed OPEX, and variable OPEX costs for cargo ships and port storage/capacity 
         def cargoShipCosts(model):
             #sum of capex for each ship you build + the fixed costs + variable costs discounted 
-            return sum(sum(model.capexShip[shipType]*model.B[ship,shipType] +
-                           model.gEY*(model.opexFixedShip[shipType]*model.B[ship,shipType] +
-                                          sum(
-                                              sum(
-                                                  sum(
-                                                      model.opexVariableShip[shipType]*(2*model.length[i,j]/model.shipSpeed)*model.X[ship,i,j,t] for t in model.horizon)
-                                                  for j in model.ports if j != i )
-                                              for i in model.ports)
-                                      ) for shipType in model.shipTypes)
-                       for ship in model.ships)
+            return (model.gEY*
+                    sum(
+                        sum(
+                            sum(   
+                                sum(
+                                    sum( 
+                                        model.Y[ship,shipType,i,j,time]*(
+                                        (2*model.opexFixedShip[shipType] +
+                                        (model.opexVariableShip[shipType]*(model.length[i,j]/model.shipSpeed))))
+                                        for j in model.ports)
+                                    for i in model.ports)
+                            for time in model.horizon) 
+                        for shipType in model.shipTypes)
+                    for ship in model.ships))
                 
         def portCosts(model):
             #sum of capex + fixed OPEX (assuming no variable OPEX) and then looking at storage and capacity costs
@@ -240,40 +239,35 @@ class greenAmmoniaTransportation:
 
 
         ###################       START CONSTRAINTS     ###################
-        #can only build 1 ship from the available models
-        def shipBuiltMax1Rule(model,ship):
-            return (sum(model.B[ship,shipType] for shipType in model.shipTypes) <= 1)
-        model.shipBuiltMax1Constraint = Constraint(model.ships,rule=shipBuiltMax1Rule)        
-        
-
-        #can only send a ship from port i to port j if the ship model is built and max capacity of tanker specs
-        def shipFlowRule(model,ship,time):
-            return (sum(
-                sum(
-                    model.X[ship,i,j,time] for i in model.ports)
-             for j in model.ports) <= sum(model.B[ship,shipType]*model.bulkSize[shipType] for shipType in model.shipTypes))
-        model.shipFlowConstraint = Constraint(model.ships,model.horizon,rule=shipFlowRule)        
-                
-
-        #max fuel that can either be deployed to another port or used to meet demand at port p
-        def maxFuelFlowRule(model,i,time):
-            return (sum(
-                sum(
-                    model.X[ship,i,j,time] for j in model.ports)
-             for ship in model.ships) + sum(model.portRegionParameter[i,r]*model.fuelFlowStorage[i,r,time] for r in model.regions) <= model.faPort[i,time])
-        model.maxFuelFlowConstraint = Constraint(model.ports,model.horizon,rule=maxFuelFlowRule)        
-           
-
         #activate port link rule-can only send a ship on one port route per month
         def activatePortLinkRule(model,ship,time):
-            return( sum(sum(model.Y[ship,i,j,time] for j in model.ports) for i in model.ports) <= 1)
+            return(sum(sum(sum(model.Y[ship,shipType,i,j,time] for j in model.ports) for i in model.ports) for shipType in model.shipTypes) <= 1)
         model.activatePortLinkConstraint = Constraint(model.ships,model.horizon,rule=activatePortLinkRule)        
 
         #activate port link rule implementation-can only send a ship on one port route per month
         def activatePortFlowRule(model,ship,i,j,time):
-            return(model.X[ship,i,j,time] <= model.length[i,j]*model.Y[ship,i,j,time]*sum(model.bulkSize[shipType] for shipType in model.shipTypes))
+            return(model.X[ship,i,j,time] <= sum(model.length[i,j]*model.Y[ship,shipType,i,j,time]*model.bulkSize[shipType] for shipType in model.shipTypes))
         model.activatePortFlowConstraint = Constraint(model.ships,model.ports,model.ports,model.horizon,rule=activatePortFlowRule)        
-        
+              
+
+
+        #max ship fuel that can be sent elsewhere must be less than fuel in storage
+        def maxShipFuelFlowRule(model,i,time):
+            return (sum(
+                sum(
+                    model.X[ship,i,j,time] for j in model.ports)
+             for ship in model.ships)  <= model.faPort[i,time])
+        model.maxShipFuelFlowConstraint= Constraint(model.ports,model.horizon,rule=maxShipFuelFlowRule)        
+           
+        #max port transfer fuel that can take place must have enough fuel in tanks
+        def maxPortFuelFlowRule(model,i,time):
+            return (sum(model.portRegionParameter[i,region]*model.fuelFlowStorage[i,region,time] for region in model.regions)  
+                    <= model.faPort[i,time])
+        model.maxPortFuelFlowConstraint= Constraint(model.ports,model.horizon,rule=maxPortFuelFlowRule)        
+           
+
+
+  
         #port import export capacity
         def portImportExportCapacityRule(model,i,time):
             return(sum(
@@ -344,11 +338,16 @@ class greenAmmoniaTransportation:
 
         
                 
-        #what model ship built
-        shipBuiltDataset = np.zeros((len(inputDataset["ships"]),len(inputDataset["shipTypes"])))
+        #what model ship is chartered at each timestep (default value of -1 means ship was not chartered over any models)
+        shipCharteredDataset = np.zeros((len(inputDataset["ships"]),len(inputDataset["horizon"]))) - 5
+        
         for ship in np.arange(len(inputDataset["ships"])):
             for shipType in np.arange(len(inputDataset["shipTypes"])):
-                shipBuiltDataset[ship][shipType] = instance.B[ship,shipType].value
+                for time in np.arange(len(inputDataset["horizon"])):
+                    #getting out shipType if it was used in activating the route
+                    if(sum(sum(instance.Y[ship,shipType,i,j,time].value for j in inputDataset["ports"]) for i in inputDataset["ports"]) != 0):
+                        shipCharteredDataset[ship][time] = shipType
+                        
 
 
         fuelFlowDataset = np.zeros((len(inputDataset["ships"]),len(inputDataset["horizon"])))
@@ -375,9 +374,9 @@ class greenAmmoniaTransportation:
         
         masterDataFrame["Input Parameters"] = inputDataset
         
-        masterDataFrame["Ship Built Dataset"] = shipBuiltDataset
+        masterDataFrame["Ship Chartered Dataset"] = shipCharteredDataset
      
-        #print(shipBuiltDataset)
+        #print(shipCharteredDataset)
         
         #ship fuel availability
         '''        fuelAvailShipDataset = np.zeros((len(inputDataset["ships"]),len(inputDataset["oceanNodes"]),len(inputDataset["horizon"])))
@@ -460,6 +459,3 @@ class greenAmmoniaTransportation:
 
 
         #print("done")
-        
-
-        
