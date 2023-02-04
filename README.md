@@ -201,3 +201,10 @@ This repo contains the work I have done and any presentations I made on my work 
 
 ## Week 11
 **Weekly Goal:** Present results and mock up draft
+* **Sunday**
+    * Develop draft
+    * Run initial results on google colab
+* **Monday**
+    * Run deeper tests on comparing results with other work
+    * Sketch up comparisons in presentation
+    * Add lifetimes per each unit in production model
